@@ -2,7 +2,10 @@ node_modules/
 dist/
 .env
 .env.local
-.DS_Store
+.env.*.local
 *.log
+.DS_Store
 coverage/
-runs/
+
+# pnpm auto-generated workspace file (not needed for single-package repo)
+pnpm-workspace.yaml
