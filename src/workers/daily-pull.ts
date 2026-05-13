@@ -3,13 +3,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Trade, Classification } from '../types.js';
 import { fetchTrades } from '../tradovate/fetch-trades.js';
 import { fetchAccessToken } from '../tradovate/auth.js';
-import { makeAdminClient } from '../persistence/supabase.js';
+import { makeAdminClient, makePublicClient } from '../persistence/supabase.js';
 import { upsertTrades } from '../persistence/trades.js';
 import { upsertClassifications } from '../persistence/classifications.js';
 import { tagTrade } from '../classify/tag-trade.js';
 import { generateDailySummary } from '../summarize/daily.js';
 import { writeMarkdownSummary } from '../delivery/markdown.js';
 import { sendTelegram } from '../delivery/telegram.js';
+import { publishRun } from '../publish/runs.js';
 
 export interface PipelineDeps {
   fetchTrades: typeof fetchTrades;
@@ -19,6 +20,7 @@ export interface PipelineDeps {
   generateDailySummary: typeof generateDailySummary;
   writeMarkdownSummary: typeof writeMarkdownSummary;
   sendTelegram: typeof sendTelegram;
+  publishRun: typeof publishRun;
 }
 
 export interface PipelineInput {
@@ -28,6 +30,7 @@ export interface PipelineInput {
   accessToken: string;
   anthropic: Anthropic;
   supabase: SupabaseClient;
+  publicSupabase: SupabaseClient;
   brainDailyPath: string;
   telegramBotToken: string;
   telegramChatId: string;
@@ -38,6 +41,7 @@ export interface PipelineResult {
   tradesProcessed: number;
   classificationsCreated: number;
   summaryPath: string;
+  publishedRunId: string | null;
 }
 
 export async function runDailyPipeline(input: PipelineInput): Promise<PipelineResult> {
@@ -49,6 +53,7 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
     generateDailySummary: input.deps?.generateDailySummary ?? generateDailySummary,
     writeMarkdownSummary: input.deps?.writeMarkdownSummary ?? writeMarkdownSummary,
     sendTelegram: input.deps?.sendTelegram ?? sendTelegram,
+    publishRun: input.deps?.publishRun ?? publishRun,
   };
 
   const from = `${input.date}T00:00:00Z`;
@@ -76,6 +81,19 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
     await d.upsertClassifications(input.supabase, classifications);
   }
 
+  let publishedRunId: string | null = null;
+  if (trades.length > 0) {
+    const published = await d.publishRun({
+      publicClient: input.publicSupabase,
+      runLabel: `${input.date} daily`,
+      source: 'tradovate',
+      sourceRef: `account-${input.accountId}`,
+      trades,
+      classifications,
+    });
+    publishedRunId = published.runId;
+  }
+
   const summary = await d.generateDailySummary({
     anthropic: input.anthropic,
     date: input.date,
@@ -101,6 +119,7 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
     tradesProcessed: trades.length,
     classificationsCreated: classifications.length,
     summaryPath,
+    publishedRunId,
   };
 }
 
@@ -118,16 +137,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     sec: process.env.TRADOVATE_SEC!,
   });
 
+  const supabaseEnv = {
+    SUPABASE_URL: process.env.SUPABASE_URL!,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  };
+
   const result = await runDailyPipeline({
     date,
     accountId: Number(process.env.TRADOVATE_ACCOUNT_ID!),
     apiUrl: process.env.TRADOVATE_API_URL!,
     accessToken: token.accessToken,
     anthropic: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }),
-    supabase: makeAdminClient({
-      SUPABASE_URL: process.env.SUPABASE_URL!,
-      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    }),
+    supabase: makeAdminClient(supabaseEnv),
+    publicSupabase: makePublicClient(supabaseEnv),
     brainDailyPath: process.env.BRAIN_DAILY_PATH!,
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',

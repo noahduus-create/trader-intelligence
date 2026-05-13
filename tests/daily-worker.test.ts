@@ -31,6 +31,7 @@ describe('runDailyPipeline', () => {
       upsertTrades: vi.fn().mockResolvedValue(undefined),
       tagTrade: vi.fn().mockResolvedValue(mockClassification),
       upsertClassifications: vi.fn().mockResolvedValue(undefined),
+      publishRun: vi.fn().mockResolvedValue({ runId: 'run-abc', classificationCount: 1 }),
       generateDailySummary: vi.fn().mockResolvedValue('# Summary'),
       writeMarkdownSummary: vi.fn().mockResolvedValue('/path/to/2026-05-13.md'),
       sendTelegram: vi.fn().mockResolvedValue(undefined),
@@ -43,6 +44,7 @@ describe('runDailyPipeline', () => {
       accessToken: 'TOKEN',
       anthropic: {} as any,
       supabase: {} as any,
+      publicSupabase: {} as any,
       brainDailyPath: '/tmp/brain',
       telegramBotToken: 'BOT',
       telegramChatId: '12345',
@@ -53,38 +55,52 @@ describe('runDailyPipeline', () => {
     expect(deps.upsertTrades).toHaveBeenCalledWith(expect.anything(), [mockTrade]);
     expect(deps.tagTrade).toHaveBeenCalledOnce();
     expect(deps.upsertClassifications).toHaveBeenCalledWith(expect.anything(), [mockClassification]);
+    expect(deps.publishRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runLabel: '2026-05-13 daily',
+        source: 'tradovate',
+        sourceRef: 'account-42',
+        trades: [mockTrade],
+        classifications: [mockClassification],
+      }),
+    );
     expect(deps.generateDailySummary).toHaveBeenCalledOnce();
     expect(deps.writeMarkdownSummary).toHaveBeenCalledOnce();
     expect(deps.sendTelegram).toHaveBeenCalledOnce();
 
     expect(result.tradesProcessed).toBe(1);
     expect(result.summaryPath).toBe('/path/to/2026-05-13.md');
+    expect(result.publishedRunId).toBe('run-abc');
   });
 
-  it('skips Telegram when token is empty', async () => {
+  it('skips publishRun and Telegram on no-trade day', async () => {
     const deps = {
       fetchTrades: vi.fn().mockResolvedValue([]),
       upsertTrades: vi.fn().mockResolvedValue(undefined),
       tagTrade: vi.fn(),
       upsertClassifications: vi.fn(),
+      publishRun: vi.fn(),
       generateDailySummary: vi.fn().mockResolvedValue('# No trades'),
       writeMarkdownSummary: vi.fn().mockResolvedValue('/path/2026-05-13.md'),
       sendTelegram: vi.fn(),
     };
 
-    await runDailyPipeline({
+    const result = await runDailyPipeline({
       date: '2026-05-13',
       accountId: 42,
       apiUrl: 'https://demo.tradovateapi.com/v1',
       accessToken: 'TOKEN',
       anthropic: {} as any,
       supabase: {} as any,
+      publicSupabase: {} as any,
       brainDailyPath: '/tmp/brain',
       telegramBotToken: '',
       telegramChatId: '',
       deps,
     });
 
+    expect(deps.publishRun).not.toHaveBeenCalled();
     expect(deps.sendTelegram).not.toHaveBeenCalled();
+    expect(result.publishedRunId).toBeNull();
   });
 });
