@@ -25,15 +25,24 @@ import { parseArgs } from 'node:util';
 import { parseTradesCsv } from './input/csv.js';
 import { tagTrade } from './classify/tag-trade.js';
 import { tagTradesViaCli } from './classify/tag-trade-cli.js';
+import { tagTradeOpenRouter, DEFAULT_OPENROUTER_MODEL } from './classify/tag-trade-openrouter.js';
 import { makePublicClient } from './persistence/supabase.js';
 import { publishRun } from './publish/runs.js';
 import type { Classification, Trade } from './types.js';
 
-function readEnv(): { supabaseUrl: string; supabaseKey: string; anthropicKey: string | undefined } {
+type ClassifierKind = 'cli' | 'sdk' | 'openrouter';
+
+function readEnv(): {
+  supabaseUrl: string;
+  supabaseKey: string;
+  anthropicKey: string | undefined;
+  openRouterKey: string | undefined;
+} {
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.MC_V2_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.MC_V2_SUPABASE_SECRET_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const openRouterKey = process.env.OPENROUTER_API_KEY;
 
   if (!supabaseUrl) {
     throw new Error('Set SUPABASE_URL or MC_V2_SUPABASE_URL');
@@ -41,14 +50,20 @@ function readEnv(): { supabaseUrl: string; supabaseKey: string; anthropicKey: st
   if (!supabaseKey) {
     throw new Error('Set SUPABASE_SERVICE_ROLE_KEY or MC_V2_SUPABASE_SECRET_KEY');
   }
-  return { supabaseUrl, supabaseKey, anthropicKey };
+  return { supabaseUrl, supabaseKey, anthropicKey, openRouterKey };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function classifyAll(
   trades: Trade[],
-  classifier: 'cli' | 'sdk',
+  classifier: ClassifierKind,
   batchSize: number,
   anthropicKey: string | undefined,
+  openRouterKey: string | undefined,
+  openRouterModel: string,
 ): Promise<{ classifications: Classification[]; errors: { tradeId: string; message: string }[]; totalCost: number }> {
   const classifications: Classification[] = [];
   const errors: { tradeId: string; message: string }[] = [];
@@ -75,22 +90,67 @@ async function classifyAll(
     return { classifications, errors, totalCost };
   }
 
-  if (!anthropicKey) {
-    throw new Error('classifier=sdk requires ANTHROPIC_API_KEY');
+  if (classifier === 'sdk') {
+    if (!anthropicKey) {
+      throw new Error('classifier=sdk requires ANTHROPIC_API_KEY');
+    }
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+    for (let i = 0; i < trades.length; i++) {
+      const trade = trades[i];
+      try {
+        const c = await tagTrade({ anthropic, trade });
+        classifications.push(c);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push({ tradeId: trade.id, message });
+        if (errors.length <= 3) console.error(`  ${trade.id}: ${message.slice(0, 200)}`);
+      }
+      if ((i + 1) % 10 === 0 || i + 1 === trades.length) {
+        console.log(`  classified ${i + 1}/${trades.length}${errors.length ? ` (${errors.length} errors)` : ''}`);
+      }
+    }
+    return { classifications, errors, totalCost: 0 };
   }
-  const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+  // OpenRouter path. Free-tier models limit to ~20 req/min, so we
+  // pace requests at one every 3.5s baseline. Transient 429/5xx errors
+  // get one retry with exponential backoff before we count them as a
+  // hard failure.
+  if (!openRouterKey) {
+    throw new Error('classifier=openrouter requires OPENROUTER_API_KEY');
+  }
+  const PACE_MS = 3500;
+  const RETRY_DELAYS = [5000, 15000]; // ms — used on transient errors
   for (let i = 0; i < trades.length; i++) {
     const trade = trades[i];
-    try {
-      const c = await tagTrade({ anthropic, trade });
-      classifications.push(c);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    let lastErr: unknown;
+    let ok = false;
+    for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+      try {
+        const c = await tagTradeOpenRouter({
+          apiKey: openRouterKey,
+          trade,
+          model: openRouterModel,
+        });
+        classifications.push(c);
+        ok = true;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const retryable = (err as { retryable?: boolean })?.retryable === true;
+        if (!retryable || attempt === RETRY_DELAYS.length) break;
+        await sleep(RETRY_DELAYS[attempt]);
+      }
+    }
+    if (!ok) {
+      const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
       errors.push({ tradeId: trade.id, message });
+      if (errors.length <= 3) console.error(`  ${trade.id}: ${message.slice(0, 200)}`);
     }
     if ((i + 1) % 10 === 0 || i + 1 === trades.length) {
       console.log(`  classified ${i + 1}/${trades.length}${errors.length ? ` (${errors.length} errors)` : ''}`);
     }
+    if (i + 1 < trades.length) await sleep(PACE_MS);
   }
   return { classifications, errors, totalCost: 0 };
 }
@@ -102,20 +162,27 @@ async function main(): Promise<void> {
       'run-label': { type: 'string' },
       limit: { type: 'string' },
       'no-publish': { type: 'boolean', default: false },
-      classifier: { type: 'string', default: 'cli' },
+      classifier: { type: 'string', default: 'openrouter' },
       'batch-size': { type: 'string', default: '50' },
+      model: { type: 'string' },
     },
   });
 
   if (!values.input) {
-    console.error('Usage: tsx src/cli-csv.ts --input <csv-path> [--run-label "..."] [--limit N] [--no-publish] [--classifier=cli|sdk] [--batch-size N]');
+    console.error(
+      'Usage: tsx src/cli-csv.ts --input <csv-path> [--run-label "..."] [--limit N] [--no-publish] [--classifier=openrouter|cli|sdk] [--batch-size N] [--model <id>]',
+    );
     process.exit(1);
   }
 
-  const classifier = values.classifier === 'sdk' ? 'sdk' : 'cli';
+  const classifier: ClassifierKind =
+    values.classifier === 'sdk' || values.classifier === 'cli' || values.classifier === 'openrouter'
+      ? (values.classifier as ClassifierKind)
+      : 'openrouter';
   const batchSize = Math.max(1, Number(values['batch-size']) || 50);
+  const openRouterModel = values.model ?? DEFAULT_OPENROUTER_MODEL;
 
-  const { supabaseUrl, supabaseKey, anthropicKey } = readEnv();
+  const { supabaseUrl, supabaseKey, anthropicKey, openRouterKey } = readEnv();
   const publicClient = makePublicClient({
     SUPABASE_URL: supabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: supabaseKey,
@@ -131,10 +198,23 @@ async function main(): Promise<void> {
     trades = trades.slice(0, n);
   }
   console.log(`Parsed ${trades.length} trades from ${values.input}`);
-  console.log(`Classifier: ${classifier}${classifier === 'cli' ? ` (batch size ${batchSize})` : ''}`);
+  const classifierLabel =
+    classifier === 'cli'
+      ? `cli (batch size ${batchSize})`
+      : classifier === 'openrouter'
+        ? `openrouter (${openRouterModel})`
+        : 'sdk';
+  console.log(`Classifier: ${classifierLabel}`);
 
   const t0 = Date.now();
-  const { classifications, errors, totalCost } = await classifyAll(trades, classifier, batchSize, anthropicKey);
+  const { classifications, errors, totalCost } = await classifyAll(
+    trades,
+    classifier,
+    batchSize,
+    anthropicKey,
+    openRouterKey,
+    openRouterModel,
+  );
   const elapsedSec = Math.round((Date.now() - t0) / 1000);
 
   console.log(`\nClassified ${classifications.length}/${trades.length} in ${elapsedSec}s${classifier === 'cli' ? ` (eq cost $${totalCost.toFixed(4)})` : ''}`);
