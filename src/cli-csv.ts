@@ -165,12 +165,13 @@ async function main(): Promise<void> {
       classifier: { type: 'string', default: 'openrouter' },
       'batch-size': { type: 'string', default: '50' },
       model: { type: 'string' },
+      'planned-trades': { type: 'string' },
     },
   });
 
   if (!values.input) {
     console.error(
-      'Usage: tsx src/cli-csv.ts --input <csv-path> [--run-label "..."] [--limit N] [--no-publish] [--classifier=openrouter|cli|sdk] [--batch-size N] [--model <id>]',
+      'Usage: tsx src/cli-csv.ts --input <csv-path> [--run-label "..."] [--limit N] [--no-publish] [--classifier=openrouter|cli|sdk] [--batch-size N] [--model <id>] [--planned-trades N]',
     );
     process.exit(1);
   }
@@ -249,6 +250,15 @@ async function main(): Promise<void> {
   });
 
   console.log(`\nPublished run ${published.runId} with ${published.classificationCount} classifications.`);
+
+  const plannedTrades = values['planned-trades'] ? Number(values['planned-trades']) : undefined;
+  if (plannedTrades !== undefined && Number.isFinite(plannedTrades) && plannedTrades > 0) {
+    const { computeSessionMetrics } = await import('./summarize/daily.js');
+    const m = computeSessionMetrics(trades, classifications, plannedTrades);
+    console.log('\nSession discipline:');
+    console.log(`  Planned: ${m.planned_count} | Actual: ${m.actual_count}${m.overtrading ? ' ⚠ OVERTRADING' : ' ✓'}`);
+    console.log(`  Ratio: ${m.overtrading_ratio}x | Low-quality: ${m.low_quality_count} trades (${m.low_quality_pct}%)`);
+  }
 }
 
 main().catch((err) => {

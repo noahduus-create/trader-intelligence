@@ -29,10 +29,12 @@ describe('ClassificationSchema', () => {
   it('parses a valid classification', () => {
     const valid = {
       trade_id: 'tradovate-12345',
+      reasoning: 'Entered slightly late on a clean ORB break of premarket high. Entry was reactive but setup was valid.',
       setup: 'ORB' as const,
       time_of_day: 'pre_market' as const,
       quality: 'A' as const,
-      mistakes: ['chased_entry'] as const,
+      entry_mistakes: ['chased_entry'] as const,
+      management_mistakes: ['none'] as const,
       notes: 'Entered 3 ticks late on a clean break of premarket high.',
     };
     expect(() => ClassificationSchema.parse(valid)).not.toThrow();

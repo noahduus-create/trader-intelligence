@@ -34,6 +34,7 @@ export interface PipelineInput {
   brainDailyPath: string;
   telegramBotToken: string;
   telegramChatId: string;
+  plannedTradesPerDay?: number;
   deps?: Partial<PipelineDeps>;
 }
 
@@ -99,6 +100,7 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
     date: input.date,
     trades,
     classifications,
+    planned_trades: input.plannedTradesPerDay,
   });
 
   const summaryPath = await d.writeMarkdownSummary({

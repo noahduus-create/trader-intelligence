@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+export const TradeContextSchema = z.object({
+  atr: z.number().optional(),
+  orb_range: z.number().optional(),
+  orb_atr_ratio: z.number().optional(),
+  exit_reason: z.string().optional(),
+  atr_percentile: z.number().min(0).max(100).optional(),
+}).optional();
+export type TradeContext = z.infer<typeof TradeContextSchema>;
+
 export const TradeSchema = z.object({
   id: z.string(),
   account_id: z.string(),
@@ -13,6 +22,7 @@ export const TradeSchema = z.object({
   exit_at: z.string().datetime(),
   pnl_usd: z.number(),
   commission_usd: z.number().nonnegative(),
+  context: TradeContextSchema,
 });
 export type Trade = z.infer<typeof TradeSchema>;
 
@@ -23,17 +33,21 @@ export const TimeOfDayEnum = z.enum([
   'pre_market', 'rth_open', 'rth_mid', 'rth_close', 'post_close',
 ]);
 export const QualityEnum = z.enum(['A+', 'A', 'B', 'C']);
-export const MistakeEnum = z.enum([
-  'chased_entry', 'moved_stop', 'oversized', 'fomo', 'revenge',
-  'exited_early', 'held_too_long', 'no_plan', 'none',
+export const EntryMistakeEnum = z.enum([
+  'chased_entry', 'oversized', 'fomo', 'revenge', 'no_plan', 'none',
+]);
+export const ManagementMistakeEnum = z.enum([
+  'moved_stop', 'exited_early', 'held_too_long', 'none',
 ]);
 
 export const ClassificationSchema = z.object({
   trade_id: z.string(),
+  reasoning: z.string(),
   setup: SetupEnum,
   time_of_day: TimeOfDayEnum,
   quality: QualityEnum,
-  mistakes: z.array(MistakeEnum),
+  entry_mistakes: z.array(EntryMistakeEnum),
+  management_mistakes: z.array(ManagementMistakeEnum),
   notes: z.string(),
 });
 export type Classification = z.infer<typeof ClassificationSchema>;
@@ -41,4 +55,5 @@ export type Classification = z.infer<typeof ClassificationSchema>;
 export type Setup = z.infer<typeof SetupEnum>;
 export type TimeOfDay = z.infer<typeof TimeOfDayEnum>;
 export type Quality = z.infer<typeof QualityEnum>;
-export type Mistake = z.infer<typeof MistakeEnum>;
+export type EntryMistake = z.infer<typeof EntryMistakeEnum>;
+export type ManagementMistake = z.infer<typeof ManagementMistakeEnum>;

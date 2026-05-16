@@ -5,10 +5,10 @@ import type { Trade, Classification } from '../src/types.js';
 describe('aggregatePatterns', () => {
   it('returns top 3 mistakes sorted by count, ignoring "none"', () => {
     const cls: Classification[] = [
-      { trade_id: 't1', setup: 'ORB', time_of_day: 'rth_open', quality: 'B', mistakes: ['chased_entry', 'oversized'], notes: '' },
-      { trade_id: 't2', setup: 'ORB', time_of_day: 'rth_open', quality: 'C', mistakes: ['chased_entry'], notes: '' },
-      { trade_id: 't3', setup: 'fade', time_of_day: 'rth_mid', quality: 'A', mistakes: ['none'], notes: '' },
-      { trade_id: 't4', setup: 'fade', time_of_day: 'rth_mid', quality: 'B', mistakes: ['chased_entry', 'moved_stop'], notes: '' },
+      { trade_id: 't1', reasoning: '', setup: 'ORB', time_of_day: 'rth_open', quality: 'B', entry_mistakes: ['chased_entry', 'oversized'], management_mistakes: ['none'], notes: '' },
+      { trade_id: 't2', reasoning: '', setup: 'ORB', time_of_day: 'rth_open', quality: 'C', entry_mistakes: ['chased_entry'], management_mistakes: ['none'], notes: '' },
+      { trade_id: 't3', reasoning: '', setup: 'fade', time_of_day: 'rth_mid', quality: 'A', entry_mistakes: ['none'], management_mistakes: ['none'], notes: '' },
+      { trade_id: 't4', reasoning: '', setup: 'fade', time_of_day: 'rth_mid', quality: 'B', entry_mistakes: ['chased_entry'], management_mistakes: ['moved_stop'], notes: '' },
     ];
 
     const patterns = aggregatePatterns(cls);
@@ -27,7 +27,7 @@ describe('aggregatePatterns', () => {
 
   it('returns empty array when only "none" mistakes', () => {
     const cls: Classification[] = [
-      { trade_id: 't1', setup: 'ORB', time_of_day: 'rth_open', quality: 'A', mistakes: ['none'], notes: '' },
+      { trade_id: 't1', reasoning: '', setup: 'ORB', time_of_day: 'rth_open', quality: 'A', entry_mistakes: ['none'], management_mistakes: ['none'], notes: '' },
     ];
     expect(aggregatePatterns(cls)).toEqual([]);
   });
@@ -79,10 +79,12 @@ describe('publishRun', () => {
     const classifications: Classification[] = [
       {
         trade_id: 't1',
+        reasoning: 'Clean ORB entry at the open. Followed the plan precisely with no deviations.',
         setup: 'ORB',
         time_of_day: 'rth_open',
         quality: 'A',
-        mistakes: ['none'],
+        entry_mistakes: ['none'],
+        management_mistakes: ['none'],
         notes: 'ren ORB',
       },
     ];
@@ -121,7 +123,9 @@ describe('publishRun', () => {
         setup: 'ORB',
         time_of_day: 'rth_open',
         quality: 'A',
-        mistakes: ['none'],
+        reasoning: 'Clean ORB entry at the open. Followed the plan precisely with no deviations.',
+        entry_mistakes: [],
+        management_mistakes: [],
         conditions: 'ren ORB',
       }),
     ]);

@@ -15,30 +15,43 @@ import { ClassificationSchema, type Classification, type Trade } from '../types.
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 
 const SYSTEM_RULES = `You are a trade-classification assistant for a futures day trader.
-For each trade in the batch, classify it on five dimensions.
+For each trade in the batch, reason first — then classify on six dimensions.
 
 Allowed values:
+- reasoning: 1-3 sentences on market context at entry, whether the plan was followed, what went wrong or right. Write this FIRST.
 - setup: "ORB" | "breakout" | "fade" | "news" | "momentum" | "mean_reversion" | "other"
 - time_of_day: "pre_market" | "rth_open" | "rth_mid" | "rth_close" | "post_close"
   (rth_open = 09:30-10:30 NY, rth_mid = 10:30-14:30 NY, rth_close = 14:30-16:00 NY)
 - quality: "A+" | "A" | "B" | "C"  (A+ textbook, A clean, B workable, C sloppy)
-- mistakes: array of zero or more of: "chased_entry" | "moved_stop" | "oversized" | "fomo" | "revenge" | "exited_early" | "held_too_long" | "no_plan" | "none"
+- entry_mistakes: entry-time errors — array of: "chased_entry" | "oversized" | "fomo" | "revenge" | "no_plan" | "none"
+- management_mistakes: post-entry errors — array of: "moved_stop" | "exited_early" | "held_too_long" | "none"
 - notes: short string (<= 200 chars) describing market context — never invent specifics
 
-Output strictly: a single JSON object where each KEY is the trade.id and each VALUE is { setup, time_of_day, quality, mistakes, notes }. No markdown fences, no prose.`;
+Output strictly: a single JSON object where each KEY is the trade.id and each VALUE is { reasoning, setup, time_of_day, quality, entry_mistakes, management_mistakes, notes }. No markdown fences, no prose.`;
 
 function buildBatchPrompt(trades: Trade[]): string {
-  const compact = trades.map((t) => ({
-    id: t.id,
-    side: t.side,
-    entry_at: t.entry_at,
-    exit_at: t.exit_at,
-    entry: t.entry_price,
-    exit: t.exit_price,
-    stop: t.stop_price,
-    qty: t.qty,
-    pnl_usd: t.pnl_usd,
-  }));
+  const compact = trades.map((t) => {
+    const base: Record<string, unknown> = {
+      id: t.id,
+      side: t.side,
+      entry_at: t.entry_at,
+      exit_at: t.exit_at,
+      entry: t.entry_price,
+      exit: t.exit_price,
+      stop: t.stop_price,
+      qty: t.qty,
+      pnl_usd: t.pnl_usd,
+    };
+    if (t.context) {
+      const ctx = t.context;
+      if (ctx.atr !== undefined) base.atr = ctx.atr;
+      if (ctx.atr_percentile !== undefined) base.atr_percentile = ctx.atr_percentile;
+      if (ctx.orb_range !== undefined) base.orb_range = ctx.orb_range;
+      if (ctx.orb_atr_ratio !== undefined) base.orb_atr_ratio = ctx.orb_atr_ratio;
+      if (ctx.exit_reason) base.exit_reason = ctx.exit_reason;
+    }
+    return base;
+  });
   return `${SYSTEM_RULES}\n\nTrades batch (${trades.length} items):\n${JSON.stringify(compact, null, 2)}\n\nReply with a JSON object keyed by trade id.`;
 }
 
