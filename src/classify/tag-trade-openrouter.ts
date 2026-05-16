@@ -63,7 +63,7 @@ export async function tagTradeOpenRouter(input: OpenRouterTagInput): Promise<Cla
     },
     body: JSON.stringify({
       model,
-      max_tokens: 512,
+      max_tokens: 768,
       temperature: 0.2,
       messages: [
         { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
