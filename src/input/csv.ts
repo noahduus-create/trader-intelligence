@@ -42,7 +42,7 @@ export function parseTradesCsv(csv: string, opts: CsvParseOptions = {}): Trade[]
   if (!text) throw new Error('Empty CSV');
 
   const lines = text.split('\n');
-  const header = lines[0].split(',').map((c) => c.trim());
+  const header = lines[0]!.split(',').map((c) => c.trim());
   for (const req of REQUIRED_COLS) {
     if (!header.includes(req)) {
       throw new Error(`Missing required column: ${req}`);
@@ -64,8 +64,8 @@ export function parseTradesCsv(csv: string, opts: CsvParseOptions = {}): Trade[]
 
   return dataLines.map((line, i) => {
     const cells = line.split(',');
-    const date = cells[idx('date')].trim();
-    const direction = cells[idx('direction')].trim().toLowerCase();
+    const date = cells[idx('date')]!.trim();
+    const direction = cells[idx('direction')]!.trim().toLowerCase();
     if (direction !== 'long' && direction !== 'short') {
       throw new Error(`Row ${i + 2}: invalid direction "${direction}"`);
     }

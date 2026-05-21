@@ -96,7 +96,7 @@ async function classifyAll(
     }
     const anthropic = new Anthropic({ apiKey: anthropicKey });
     for (let i = 0; i < trades.length; i++) {
-      const trade = trades[i];
+      const trade = trades[i]!;
       try {
         const c = await tagTrade({ anthropic, trade });
         classifications.push(c);
@@ -122,7 +122,7 @@ async function classifyAll(
   const PACE_MS = 3500;
   const RETRY_DELAYS = [5000, 15000]; // ms — used on transient errors
   for (let i = 0; i < trades.length; i++) {
-    const trade = trades[i];
+    const trade = trades[i]!;
     let lastErr: unknown;
     let ok = false;
     for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
@@ -139,7 +139,7 @@ async function classifyAll(
         lastErr = err;
         const retryable = (err as { retryable?: boolean })?.retryable === true;
         if (!retryable || attempt === RETRY_DELAYS.length) break;
-        await sleep(RETRY_DELAYS[attempt]);
+        await sleep(RETRY_DELAYS[attempt]!);
       }
     }
     if (!ok) {

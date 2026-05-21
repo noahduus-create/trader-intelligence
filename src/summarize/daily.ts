@@ -95,7 +95,7 @@ Skriv markdown-summary.`;
         type: 'text',
         text: SUMMARY_SYSTEM,
         cache_control: { type: 'ephemeral' },
-      },
+      } as any,
     ],
     messages: [{ role: 'user', content: userMessage }],
   });

@@ -29,7 +29,7 @@ export async function tagTrade(input: TagInput): Promise<Classification> {
         type: 'text',
         text: CLASSIFY_SYSTEM_PROMPT,
         cache_control: { type: 'ephemeral' },
-      },
+      } as any,
     ],
     messages: [
       {

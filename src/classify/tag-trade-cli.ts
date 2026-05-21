@@ -90,7 +90,7 @@ interface ClaudeEnvelope {
 
 function stripCodeFences(text: string): string {
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  return fenceMatch ? fenceMatch[1].trim() : text.trim();
+  return fenceMatch ? (fenceMatch[1] ?? '').trim() : text.trim();
 }
 
 export interface BatchResult {
