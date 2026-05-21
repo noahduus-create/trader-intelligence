@@ -10,9 +10,9 @@ export interface OpenRouterTagInput {
   appName?: string;
 }
 
-// Default to the strongest instruction-tuned free model on OpenRouter as
-// of 2026-05. Caller can override per-run via the --model flag.
-export const DEFAULT_OPENROUTER_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+// Default free model on OpenRouter. Caller can override via --model flag.
+// Updated 2026-05-21: deepseek-v4-flash:free has capacity; llama-3.3-70b:free is rate-limited upstream.
+export const DEFAULT_OPENROUTER_MODEL = 'deepseek/deepseek-v4-flash:free';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
