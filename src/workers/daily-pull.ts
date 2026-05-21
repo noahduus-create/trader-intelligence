@@ -7,7 +7,11 @@ import { makeAdminClient, makePublicClient } from '../persistence/supabase.js';
 import { upsertTrades } from '../persistence/trades.js';
 import { upsertClassifications } from '../persistence/classifications.js';
 import { tagTrade } from '../classify/tag-trade.js';
+import { buildSequenceContexts } from '../classify/sequence-context.js';
+import { mapWithConcurrency } from '../lib/concurrency.js';
 import { generateDailySummary } from '../summarize/daily.js';
+
+const DEFAULT_CLASSIFY_CONCURRENCY = 3;
 import { writeMarkdownSummary } from '../delivery/markdown.js';
 import { sendTelegram } from '../delivery/telegram.js';
 import { publishRun } from '../publish/runs.js';
@@ -35,6 +39,7 @@ export interface PipelineInput {
   telegramBotToken: string;
   telegramChatId: string;
   plannedTradesPerDay?: number;
+  classifyConcurrency?: number;
   deps?: Partial<PipelineDeps>;
 }
 
@@ -72,11 +77,17 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
     await d.upsertTrades(input.supabase, trades);
   }
 
-  const classifications: Classification[] = [];
-  for (const trade of trades) {
-    const c = await d.tagTrade({ anthropic: input.anthropic, trade });
-    classifications.push(c);
-  }
+  const sessionContexts = buildSequenceContexts(trades);
+  const concurrency = input.classifyConcurrency ?? DEFAULT_CLASSIFY_CONCURRENCY;
+  const classifications: Classification[] = await mapWithConcurrency(
+    trades,
+    concurrency,
+    (trade, i) => d.tagTrade({
+      anthropic: input.anthropic,
+      trade,
+      sessionContext: sessionContexts[i]!,
+    }),
+  );
 
   if (classifications.length > 0) {
     await d.upsertClassifications(input.supabase, classifications);

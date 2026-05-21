@@ -9,6 +9,15 @@ export const TradeContextSchema = z.object({
 }).optional();
 export type TradeContext = z.infer<typeof TradeContextSchema>;
 
+export const ExecutionProfileSchema = z.object({
+  scale_in_count: z.number().int().positive(),
+  scale_out_count: z.number().int().positive(),
+  entry_span_seconds: z.number().int().nonnegative(),
+  exit_span_seconds: z.number().int().nonnegative(),
+  position_held_seconds: z.number().int().nonnegative(),
+}).optional();
+export type ExecutionProfile = z.infer<typeof ExecutionProfileSchema>;
+
 export const TradeSchema = z.object({
   id: z.string(),
   account_id: z.string(),
@@ -23,6 +32,7 @@ export const TradeSchema = z.object({
   pnl_usd: z.number(),
   commission_usd: z.number().nonnegative(),
   context: TradeContextSchema,
+  execution_profile: ExecutionProfileSchema,
 });
 export type Trade = z.infer<typeof TradeSchema>;
 

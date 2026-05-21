@@ -2,11 +2,13 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { ClassificationSchema, type Classification, type Trade } from '../types.js';
 import { CLASSIFY_SYSTEM_PROMPT, buildUserPrompt } from './prompt.js';
 import { computeRMultiple } from '../metrics/r-multiple.js';
+import type { SessionSequenceContext } from './sequence-context.js';
 
 export interface TagInput {
   anthropic: Anthropic;
   trade: Trade;
   model?: string;
+  sessionContext?: SessionSequenceContext;
 }
 
 export async function tagTrade(input: TagInput): Promise<Classification> {
@@ -34,7 +36,12 @@ export async function tagTrade(input: TagInput): Promise<Classification> {
     messages: [
       {
         role: 'user',
-        content: buildUserPrompt({ ...trade, r_multiple: r }),
+        content: buildUserPrompt({
+          ...trade,
+          r_multiple: r,
+          session_context: input.sessionContext ?? null,
+          execution_profile: trade.execution_profile ?? null,
+        }),
       },
     ],
   });
