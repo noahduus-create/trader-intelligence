@@ -11,10 +11,12 @@ describe('upsertClassifications', () => {
     const classifications: Classification[] = [
       {
         trade_id: 't1',
+        reasoning: 'Clean ORB setup, plan followed.',
         setup: 'ORB',
         time_of_day: 'rth_open',
         quality: 'A',
-        mistakes: ['none'],
+        entry_mistakes: ['none'],
+        management_mistakes: ['none'],
         notes: 'clean ORB',
       },
     ];

@@ -29,11 +29,12 @@ export interface PipelineInput {
   apiUrl: string;
   accessToken: string;
   anthropic: Anthropic;
-  supabase: SupabaseClient;
-  publicSupabase: SupabaseClient;
+  supabase: SupabaseClient<any, any, any>;
+  publicSupabase: SupabaseClient<any, any, any>;
   brainDailyPath: string;
   telegramBotToken: string;
   telegramChatId: string;
+  plannedTradesPerDay?: number;
   deps?: Partial<PipelineDeps>;
 }
 
@@ -99,6 +100,7 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
     date: input.date,
     trades,
     classifications,
+    planned_trades: input.plannedTradesPerDay,
   });
 
   const summaryPath = await d.writeMarkdownSummary({
@@ -124,7 +126,6 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await import('dotenv-flow/config');
   const date = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 
   const token = await fetchAccessToken({

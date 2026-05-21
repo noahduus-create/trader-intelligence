@@ -24,7 +24,8 @@ export interface PatternSummary {
 export function aggregatePatterns(classifications: Classification[]): PatternSummary[] {
   const mistakeCounts = new Map<string, number>();
   for (const c of classifications) {
-    for (const m of c.mistakes) {
+    const allMistakes = [...c.entry_mistakes, ...c.management_mistakes];
+    for (const m of allMistakes) {
       if (m === 'none') continue;
       mistakeCounts.set(m, (mistakeCounts.get(m) ?? 0) + 1);
     }
@@ -83,7 +84,9 @@ export async function publishRun(input: PublishRunInput): Promise<PublishedRun> 
       setup: c.setup,
       time_of_day: c.time_of_day,
       quality: c.quality,
-      mistakes: c.mistakes,
+      reasoning: c.reasoning,
+      entry_mistakes: c.entry_mistakes.filter(m => m !== 'none'),
+      management_mistakes: c.management_mistakes.filter(m => m !== 'none'),
       conditions: c.notes,
     };
   });

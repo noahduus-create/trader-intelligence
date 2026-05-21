@@ -5,10 +5,12 @@ import type { Trade } from '../src/types.js';
 describe('tagTrade', () => {
   it('returns parsed classification on valid LLM response', async () => {
     const llmJson = JSON.stringify({
+      reasoning: 'Opened long on the ORB breakout at 09:31. Plan was followed exactly with no deviations.',
       setup: 'ORB',
       time_of_day: 'rth_open',
       quality: 'A',
-      mistakes: ['none'],
+      entry_mistakes: ['none'],
+      management_mistakes: ['none'],
       notes: 'Ren ORB-breakout, fulgte planen.',
     });
 
@@ -39,7 +41,8 @@ describe('tagTrade', () => {
     expect(result.setup).toBe('ORB');
     expect(result.time_of_day).toBe('rth_open');
     expect(result.quality).toBe('A');
-    expect(result.mistakes).toEqual(['none']);
+    expect(result.entry_mistakes).toEqual(['none']);
+    expect(result.management_mistakes).toEqual(['none']);
     expect(result.notes).toContain('ORB');
   });
 
@@ -79,10 +82,12 @@ describe('tagTrade', () => {
             {
               type: 'text',
               text: JSON.stringify({
+                reasoning: 'Mid-session fade attempt. Entry was reactive to news spike.',
                 setup: 'other',
                 time_of_day: 'rth_mid',
                 quality: 'B',
-                mistakes: ['none'],
+                entry_mistakes: ['none'],
+                management_mistakes: ['none'],
                 notes: 'test',
               }),
             },
