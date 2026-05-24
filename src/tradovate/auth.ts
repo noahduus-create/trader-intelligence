@@ -36,7 +36,7 @@ export async function fetchAccessToken(input: AuthInput): Promise<AccessToken> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Tradovate auth HTTP ${res.status}: ${text}`);
+    throw new Error(`Tradovate auth HTTP ${res.status}: ${redactAuthBody(text, input)}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
@@ -57,4 +57,15 @@ export async function fetchAccessToken(input: AuthInput): Promise<AccessToken> {
     expiresAt: new Date(data.expirationTime as string),
     userId: data.userId as number,
   };
+}
+
+// Some auth endpoints echo back the submitted credentials or app secret in
+// 4xx error bodies. Strip the values we know are sensitive before letting the
+// body land in an Error.message (which often flows to logs / Telegram / Sentry).
+export function redactAuthBody(body: string, input: AuthInput): string {
+  const truncated = body.slice(0, 200);
+  return truncated
+    .split(input.password).join('[REDACTED]')
+    .split(input.sec).join('[REDACTED]')
+    .split(input.cid).join('[REDACTED]');
 }

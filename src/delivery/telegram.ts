@@ -41,16 +41,26 @@ async function sendOneChunk(input: TelegramInput): Promise<void> {
   const baseDelay = input.retryDelayMs ?? 500;
 
   const postOnce = async (parseMode: 'Markdown' | undefined) => {
-    const res = await f(`https://api.telegram.org/bot${input.botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: input.chatId,
-        text: input.text,
-        ...(parseMode ? { parse_mode: parseMode } : {}),
-      }),
-    });
-    const body = res.ok ? '' : await res.text();
+    const url = `https://api.telegram.org/bot${input.botToken}/sendMessage`;
+    let res;
+    try {
+      res = await f(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: input.chatId,
+          text: input.text,
+          ...(parseMode ? { parse_mode: parseMode } : {}),
+        }),
+      });
+    } catch (err) {
+      // Network failures (DNS, refused, etc.) include the URL — and therefore
+      // the bot token — in their error message. Re-throw with the token redacted.
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Telegram network error: ${redactToken(msg, input.botToken)}`);
+    }
+    const rawBody = res.ok ? '' : await res.text();
+    const body = redactToken(rawBody, input.botToken);
     return { ok: res.ok, status: res.status, body };
   };
 
@@ -80,4 +90,9 @@ async function sendOneChunk(input: TelegramInput): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function redactToken(text: string, token: string): string {
+  if (!token) return text;
+  return text.split(token).join('[REDACTED]');
 }

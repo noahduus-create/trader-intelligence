@@ -37,12 +37,49 @@ function atrPercentile(atrValues: number[], target: number): number {
   return Math.round((below / atrValues.length) * 100);
 }
 
+// Minimal RFC 4180 lexer. Returns rows as string arrays.
+// Handles quoted fields containing commas, escaped quotes (""), CRLF/LF line
+// endings, and trailing newlines. Does NOT support multi-character delimiters.
+export function parseCsvRows(input: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let i = 0;
+  let inQuotes = false;
+  while (i < input.length) {
+    const c = input[i]!;
+    if (inQuotes) {
+      if (c === '"') {
+        if (input[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"' && field.length === 0) { inQuotes = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') {
+      row.push(field); field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = []; i++; continue;
+    }
+    field += c; i++;
+  }
+  // Flush trailing field/row
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    if (row.length > 1 || row[0] !== '') rows.push(row);
+  }
+  return rows;
+}
+
 export function parseTradesCsv(csv: string, opts: CsvParseOptions = {}): Trade[] {
   const text = csv.trim();
   if (!text) throw new Error('Empty CSV');
 
-  const lines = text.split('\n');
-  const header = lines[0]!.split(',').map((c) => c.trim());
+  const allRows = parseCsvRows(text);
+  if (allRows.length === 0) throw new Error('Empty CSV');
+  const header = allRows[0]!.map((c) => c.trim());
   for (const req of REQUIRED_COLS) {
     if (!header.includes(req)) {
       throw new Error(`Missing required column: ${req}`);
@@ -55,15 +92,14 @@ export function parseTradesCsv(csv: string, opts: CsvParseOptions = {}): Trade[]
   const hasContext = CONTEXT_COLS.some(col => header.includes(col));
   const hasAtr = header.includes('atr');
 
-  const dataLines = lines.slice(1).filter(l => l.trim());
+  const dataRows = allRows.slice(1).filter(r => r.some(cell => cell.trim() !== ''));
 
   // Collect all ATR values first so we can compute per-trade percentile.
   const allAtrs: number[] = hasAtr
-    ? dataLines.map(l => Number(l.split(',')[idx('atr')])).filter(v => Number.isFinite(v) && v > 0)
+    ? dataRows.map(r => Number(r[idx('atr')])).filter(v => Number.isFinite(v) && v > 0)
     : [];
 
-  return dataLines.map((line, i) => {
-    const cells = line.split(',');
+  return dataRows.map((cells, i) => {
     const date = cells[idx('date')]!.trim();
     const direction = cells[idx('direction')]!.trim().toLowerCase();
     if (direction !== 'long' && direction !== 'short') {

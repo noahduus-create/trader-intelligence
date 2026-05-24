@@ -26,7 +26,7 @@ import { parseTradesCsv } from './input/csv.js';
 import { tagTrade } from './classify/tag-trade.js';
 import { tagTradesViaCli } from './classify/tag-trade-cli.js';
 import { tagTradeOpenRouter, DEFAULT_OPENROUTER_MODEL } from './classify/tag-trade-openrouter.js';
-import { makePublicClient } from './persistence/supabase.js';
+import { makeMcServiceClient } from './persistence/supabase.js';
 import { publishRun } from './publish/runs.js';
 import type { Classification, Trade } from './types.js';
 
@@ -184,7 +184,7 @@ async function main(): Promise<void> {
   const openRouterModel = values.model ?? DEFAULT_OPENROUTER_MODEL;
 
   const { supabaseUrl, supabaseKey, anthropicKey, openRouterKey } = readEnv();
-  const publicClient = makePublicClient({
+  const publicClient = makeMcServiceClient({
     SUPABASE_URL: supabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: supabaseKey,
   });

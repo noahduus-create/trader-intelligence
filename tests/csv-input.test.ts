@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTradesCsv } from '../src/input/csv.js';
+import { parseTradesCsv, parseCsvRows } from '../src/input/csv.js';
 
 const MINIMAL_HEADER = 'date,direction,entry,stop,exit_price,pnl_usd,contracts';
 
@@ -79,5 +79,50 @@ describe('parseTradesCsv', () => {
 
   it('returns empty array for header-only CSV', () => {
     expect(parseTradesCsv(MINIMAL_HEADER)).toHaveLength(0);
+  });
+
+  it('correctly parses rows containing quoted fields with commas', () => {
+    // exit_reason wrapped in quotes containing a comma — naive split(",") would
+    // shift every subsequent column by one. RFC 4180 parser must handle this.
+    const header = `${MINIMAL_HEADER},exit_reason`;
+    const row = `2026-05-01,long,19000,18950,19050,25,1,"stopped out, then reversed"`;
+    const [trade] = parseTradesCsv(`${header}\n${row}`);
+    expect(trade!.entry_price).toBe(19000);
+    expect(trade!.exit_price).toBe(19050);
+    expect(trade!.qty).toBe(1);
+    expect(trade!.context?.exit_reason).toBe('stopped out, then reversed');
+  });
+
+  it('handles escaped double quotes inside quoted fields', () => {
+    const header = `${MINIMAL_HEADER},exit_reason`;
+    const row = `2026-05-01,long,19000,18950,19050,25,1,"hit ""target"" zone"`;
+    const [trade] = parseTradesCsv(`${header}\n${row}`);
+    expect(trade!.context?.exit_reason).toBe('hit "target" zone');
+  });
+});
+
+describe('parseCsvRows (RFC 4180 lexer)', () => {
+  it('splits a simple unquoted CSV', () => {
+    expect(parseCsvRows('a,b,c\n1,2,3')).toEqual([['a', 'b', 'c'], ['1', '2', '3']]);
+  });
+
+  it('preserves commas inside quoted fields', () => {
+    expect(parseCsvRows('a,b\n1,"x,y"')).toEqual([['a', 'b'], ['1', 'x,y']]);
+  });
+
+  it('handles escaped quotes', () => {
+    expect(parseCsvRows('a\n"he said ""hi"""')).toEqual([['a'], ['he said "hi"']]);
+  });
+
+  it('handles CRLF line endings', () => {
+    expect(parseCsvRows('a,b\r\n1,2\r\n3,4')).toEqual([['a', 'b'], ['1', '2'], ['3', '4']]);
+  });
+
+  it('skips a fully empty trailing row', () => {
+    expect(parseCsvRows('a,b\n1,2\n')).toEqual([['a', 'b'], ['1', '2']]);
+  });
+
+  it('preserves newlines inside quoted fields', () => {
+    expect(parseCsvRows('a\n"line1\nline2"')).toEqual([['a'], ['line1\nline2']]);
   });
 });

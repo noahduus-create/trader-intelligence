@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Trade, Classification } from '../types.js';
 import { fetchTrades } from '../tradovate/fetch-trades.js';
 import { fetchAccessToken } from '../tradovate/auth.js';
-import { makeAdminClient, makePublicClient } from '../persistence/supabase.js';
+import { makeAdminClient, makeMcServiceClient } from '../persistence/supabase.js';
 import { upsertTrades } from '../persistence/trades.js';
 import { upsertClassifications } from '../persistence/classifications.js';
 import { tagTrade } from '../classify/tag-trade.js';
@@ -136,8 +136,13 @@ export async function runDailyPipeline(input: PipelineInput): Promise<PipelineRe
   };
 }
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const date = process.argv[2] ?? new Date().toISOString().slice(0, 10);
+  if (!DATE_PATTERN.test(date)) {
+    throw new Error(`Invalid date argument: ${JSON.stringify(date)} — expected YYYY-MM-DD`);
+  }
 
   const token = await fetchAccessToken({
     apiUrl: process.env.TRADOVATE_API_URL!,
@@ -161,7 +166,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     accessToken: token.accessToken,
     anthropic: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }),
     supabase: makeAdminClient(supabaseEnv),
-    publicSupabase: makePublicClient(supabaseEnv),
+    publicSupabase: makeMcServiceClient(supabaseEnv),
     brainDailyPath: process.env.BRAIN_DAILY_PATH!,
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',

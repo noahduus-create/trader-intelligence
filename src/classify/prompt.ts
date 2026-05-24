@@ -85,6 +85,14 @@ R-multiple: ${trade.r_multiple?.toFixed(2) ?? 'unknown'}${regimeSection}${sessio
 Classify per the schema. JSON only.`;
 }
 
+// Strip everything outside word chars, literal space, dot, hyphen. Length-capped.
+// exit_reason flows from user-supplied CSV into the LLM prompt — without this
+// a crafted value (newlines + JSON markers) can break out of its line and inject
+// fake instructions. \s is excluded deliberately so \n, \t, etc. are killed.
+export function sanitizeForPrompt(raw: string, maxLen = 50): string {
+  return raw.replace(/[^\w .-]/g, '').slice(0, maxLen).trim();
+}
+
 function buildRegimeSection(ctx: UserPromptTrade['context']): string {
   if (!ctx) return '';
   const lines: string[] = [];
@@ -95,7 +103,10 @@ function buildRegimeSection(ctx: UserPromptTrade['context']): string {
   }
   if (ctx.orb_range !== undefined) lines.push(`ORB range: ${ctx.orb_range.toFixed(2)}`);
   if (ctx.orb_atr_ratio !== undefined) lines.push(`ORB/ATR ratio: ${ctx.orb_atr_ratio.toFixed(2)}`);
-  if (ctx.exit_reason) lines.push(`Exit reason: ${ctx.exit_reason}`);
+  if (ctx.exit_reason) {
+    const safe = sanitizeForPrompt(ctx.exit_reason);
+    if (safe) lines.push(`Exit reason: "${safe}"`);
+  }
   return lines.length > 0 ? `\nMarket context:\n${lines.map(l => `  ${l}`).join('\n')}` : '';
 }
 

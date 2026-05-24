@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeMarkdownSummary } from '../src/delivery/markdown.js';
-import { sendTelegram, chunkForTelegram } from '../src/delivery/telegram.js';
+import { sendTelegram, chunkForTelegram, redactToken } from '../src/delivery/telegram.js';
 
 describe('writeMarkdownSummary', () => {
   let baseDir: string;
@@ -146,5 +146,47 @@ describe('sendTelegram', () => {
       sendTelegram({ botToken: 'BAD', chatId: '12345', text: 'hi', fetchImpl: fetchMock, retryDelayMs: 1 }),
     ).rejects.toThrow(/401/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('redacts bot token from network-failure error message', async () => {
+    const SECRET_TOKEN = '1234567890:AAEhBP-_real_looking_token_xyz';
+    const fetchMock = vi.fn().mockRejectedValue(
+      new Error(`getaddrinfo ENOTFOUND api.telegram.org/bot${SECRET_TOKEN}/sendMessage`),
+    );
+    let caught: unknown;
+    try {
+      await sendTelegram({ botToken: SECRET_TOKEN, chatId: '12345', text: 'hi', fetchImpl: fetchMock, retryDelayMs: 1 });
+    } catch (e) { caught = e; }
+    const msg = (caught as Error).message;
+    expect(msg).not.toContain(SECRET_TOKEN);
+    expect(msg).toContain('[REDACTED]');
+  });
+
+  it('redacts bot token from HTTP error body', async () => {
+    const SECRET_TOKEN = '999:secret-token-xyz';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => `Unauthorized: bot${SECRET_TOKEN} not found`,
+    });
+    let caught: unknown;
+    try {
+      await sendTelegram({ botToken: SECRET_TOKEN, chatId: '12345', text: 'hi', fetchImpl: fetchMock, retryDelayMs: 1 });
+    } catch (e) { caught = e; }
+    const msg = (caught as Error).message;
+    expect(msg).not.toContain(SECRET_TOKEN);
+    expect(msg).toContain('[REDACTED]');
+  });
+});
+
+describe('redactToken', () => {
+  it('replaces every occurrence of the token', () => {
+    expect(redactToken('foo SECRET bar SECRET baz', 'SECRET')).toBe('foo [REDACTED] bar [REDACTED] baz');
+  });
+  it('is a no-op when token is empty', () => {
+    expect(redactToken('foo', '')).toBe('foo');
+  });
+  it('does not touch text without the token', () => {
+    expect(redactToken('clean text', 'SECRET')).toBe('clean text');
   });
 });
