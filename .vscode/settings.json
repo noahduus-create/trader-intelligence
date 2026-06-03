@@ -1,0 +1,11 @@
+{
+  "//": "Humane sidebar — surfaces src/db/tests/docs, hides node_modules + build + caches. Reversible; delete a line to un-hide.",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/coverage": true,
+    "**/.DS_Store": true,
+    "graphify-out": true
+  }
+}
